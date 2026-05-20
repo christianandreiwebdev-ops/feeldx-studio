@@ -19,13 +19,9 @@ export default async function handler(req) {
     });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  // Debug: log whether key exists (not the key itself)
-  console.log('API key present:', !!apiKey);
-
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'GEMINI_API_KEY not found in environment' }), {
+    return new Response(JSON.stringify({ error: 'GROQ_API_KEY not configured' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
@@ -35,7 +31,7 @@ export default async function handler(req) {
   try {
     body = await req.json();
   } catch (e) {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body: ' + e.message }), {
+    return new Response(JSON.stringify({ error: 'Invalid JSON: ' + e.message }), {
       status: 400,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
@@ -43,39 +39,52 @@ export default async function handler(req) {
 
   const prompt = body.messages?.[0]?.content || '';
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${apiKey}`;
-
-  let geminiRes;
+  let groqRes;
   try {
-    geminiRes = await fetch(geminiUrl, {
+    groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1000, temperature: 0.7 },
+        model:       'llama-3.1-8b-instant',
+        max_tokens:  1000,
+        temperature: 0.7,
+        stream:      true,
+        messages: [
+          {
+            role:    'system',
+            content: 'You are a warm, expert interior design consultant. Write flowing prose only — no bullet points, no markdown.',
+          },
+          {
+            role:    'user',
+            content: prompt,
+          },
+        ],
       }),
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: 'Failed to reach Gemini: ' + e.message }), {
+    return new Response(JSON.stringify({ error: 'Failed to reach Groq: ' + e.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 
-  if (!geminiRes.ok) {
-    const errText = await geminiRes.text();
-    console.error('Gemini error:', geminiRes.status, errText);
-    return new Response(JSON.stringify({ error: `Gemini ${geminiRes.status}: ${errText}` }), {
-      status: geminiRes.status,
+  if (!groqRes.ok) {
+    const errText = await groqRes.text();
+    console.error('Groq error:', groqRes.status, errText);
+    return new Response(JSON.stringify({ error: `Groq ${groqRes.status}: ${errText}` }), {
+      status: groqRes.status,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 
-  // Transform Gemini SSE → Anthropic-compatible SSE
+  // Transform Groq SSE (OpenAI format) → Anthropic-compatible SSE so AiPanel works unchanged
   const encoder = new TextEncoder();
-  const stream = new ReadableStream({
+  const stream  = new ReadableStream({
     async start(controller) {
-      const reader  = geminiRes.body.getReader();
+      const reader  = groqRes.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
 
@@ -92,8 +101,9 @@ export default async function handler(req) {
           if (!raw || raw === '[DONE]') continue;
           try {
             const parsed = JSON.parse(raw);
-            const text   = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+            const text   = parsed.choices?.[0]?.delta?.content;
             if (text) {
+              // Emit in Anthropic SSE format so AiPanel.jsx needs no changes
               const event = { type: 'content_block_delta', delta: { text } };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
