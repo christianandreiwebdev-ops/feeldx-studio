@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { estimateCost, buildNotes, buildPrompt } from "../utils/analysis";
 
+// Always use the serverless function — works on Vercel and locally via proxy
 const API_URL =
-  window.location.protocol === "file:" ||
-  window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1"
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://localhost:3131"
-    : "https://api.anthropic.com/v1/messages";
+    : "/api/chat";
 
 export default function AiPanel({ currentRoom, roomName, selections }) {
   const [visible,    setVisible]    = useState(false);
