@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { estimateCost, buildNotes, buildPrompt } from "../utils/analysis";
 
-// Always use the serverless function — works on Vercel and locally via proxy
 const API_URL =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://localhost:3131"
@@ -12,6 +11,14 @@ export default function AiPanel({ currentRoom, roomName, selections }) {
   const [loading,    setLoading]    = useState(false);
   const [streamText, setStreamText] = useState("");
   const [done,       setDone]       = useState(false);
+
+  // ✅ Reset everything when room changes
+  useEffect(() => {
+    setVisible(false);
+    setLoading(false);
+    setStreamText("");
+    setDone(false);
+  }, [currentRoom]);
 
   async function generate() {
     if (!Object.keys(selections).length) {
@@ -92,17 +99,14 @@ export default function AiPanel({ currentRoom, roomName, selections }) {
 
       {visible && (
         <div className="ai-panel visible">
-          {/* Title */}
           <div className="ai-panel-title">
             <i className="fa-solid fa-wand-magic-sparkles" style={{ color: "var(--gold)", fontSize: 13 }} />
             AI Summary — {roomName}
           </div>
 
-          {/* Selected items */}
           <p className="ai-section-label" style={{ marginTop: 0 }}>Selected Items</p>
           {itemsHtml}
 
-          {/* Cost */}
           <div className="ai-divider" />
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "0.5rem" }}>
             <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
@@ -111,7 +115,6 @@ export default function AiPanel({ currentRoom, roomName, selections }) {
             <span className={`cost-badge ${cost.cls}`}>{cost.label}</span>
           </div>
 
-          {/* Notes */}
           {notes.length > 0 && (
             <>
               <div className="ai-divider" />
@@ -122,7 +125,6 @@ export default function AiPanel({ currentRoom, roomName, selections }) {
             </>
           )}
 
-          {/* Streaming analysis */}
           <div className="ai-divider" />
           <p className="ai-section-label">Analysis</p>
           <div className="ai-stream-body">
@@ -138,7 +140,6 @@ export default function AiPanel({ currentRoom, roomName, selections }) {
             ))}
           </div>
 
-          {/* Next steps */}
           {done && (
             <>
               <div className="ai-divider" />
